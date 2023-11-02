@@ -1,7 +1,7 @@
 version: "2"
 
 services:
-  balena-hello-world:
+  desk-controller:
     build: .
     ports:
-      - "80:80"
+      - "80:5000"
