@@ -17,10 +17,10 @@ COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
 # This will copy all files in our root to the working  directory in the container
-COPY . ./
+COPY ./src/app.py ./
 
 # Enable udevd so that plugged dynamic hardware devices show up in our container.
 ENV UDEV=1
 
 # main.py will run when container starts up on the device
-CMD ["python","-u","src/app.py"]
+CMD ["python","-u","/usr/src/app/app.py"]
