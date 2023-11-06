@@ -1,8 +1,6 @@
 on:
- pull_request:
-    types: [opened, synchronize, closed]
-    branches:
-      - main      
+  release:
+    types: [published] 
 
 jobs:
   balena_cloud_build:
