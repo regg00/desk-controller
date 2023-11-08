@@ -1,100 +1,67 @@
-from flask import Flask, make_response
-from flask_restful import Resource, Api, reqparse
 import RPi.GPIO as GPIO
+import os
 import time
-import json
 
-GPIO_PRESET_1 = 25   # sit
-GPIO_PRESET_4 = 24   # stand
-
-
-GPIO.cleanup()
-
-# GPIO setup
-GPIO.setmode(GPIO.BCM)
-#removing the warings
-GPIO.setwarnings(False)
-
-#setting the mode for all pins so all will be switched on
-GPIO.setup(GPIO_PRESET_1, GPIO.OUT)
-GPIO.setup(GPIO_PRESET_1, GPIO.LOW)
-GPIO.setup(GPIO_PRESET_4, GPIO.OUT)
-GPIO.setup(GPIO_PRESET_4, GPIO.LOW)
-
-app = Flask(__name__)
-api = Api(app)
-state = None
-
-# API definition
-class DeskController(Resource):
-    def __init__(self):
-        self.parser = reqparse.RequestParser()
-        self.parser.add_argument('position', type=str, help='Which position to set the desk to. Valide values are sit or stand.')
-
-    # Set the position
-    def set_position(self, position: str) -> int:
-        global state
-        if position == 'sit':
-            GPIO.output(GPIO_PRESET_1,  GPIO.HIGH)
-            time.sleep(1)
-            GPIO.output(GPIO_PRESET_1,  GPIO.LOW)
-            state = 'sit'
-
-        if position == 'stand':
-            GPIO.output(GPIO_PRESET_4,  GPIO.HIGH)
-            time.sleep(1)
-            GPIO.output(GPIO_PRESET_4,  GPIO.LOW)
-            state = 'stand'
+TRIGGER_PIN = int(os.environ.get("TRIGGER_PIN"))
+ECHO_PIN = int(os.environ.get("ECHO_PIN"))
+MAX_DISTANCE = int(os.environ.get("MAX_DISTANCE"))
+TIMEOUT = MAX_DISTANCE * 60
 
 
-    def get(self):
-        global state
-        if state == 'stand':
-            result = {'is_active': True}
-        else:
-            result = {'is_active': False}
-        response = make_response(json.dumps(result))
-        response.headers['Content-Type'] = 'application/json'
-        return response
+# Obtain pulse time of a pin under TIMEOUT
+def pulse_in(pin: int, level, TIMEOUT: int):
+    t0 = time.time()
+    while GPIO.input(pin) != level:
+        if (time.time() - t0) > TIMEOUT * 0.000001:
+            return 0
+    t0 = time.time()
+    while GPIO.input(pin) == level:
+        if (time.time() - t0) > TIMEOUT * 0.000001:
+            return 0
+    pulse_time = (time.time() - t0) * 1000000
+    return pulse_time
 
 
+# Get the measurement results of ultrasonic module,with unit: cm
+def get_sonar():
+    # make TRIGGER_PIN output 10us HIGH level
+    GPIO.output(TRIGGER_PIN, GPIO.HIGH)
+
+    # 10us
+    time.sleep(0.00001)
+
+    # make TRIGGER_PIN output LOW level
+    GPIO.output(TRIGGER_PIN, GPIO.LOW)
+
+    # read plus time of ECHO_PIN
+    ping_time = pulse_in(ECHO_PIN, GPIO.HIGH, TIMEOUT)
+
+    # calculate distance with sound speed 340m/s
+    distance = ping_time * 340.0 / 2.0 / 10000.0
+    return distance
 
 
-    # POST to set the height
-    def post(self):
-        args = self.parser.parse_args()
-        self.set_position(args.position)
+def setup():
+    # use PHYSICAL GPIO Numbering
+    GPIO.setmode(GPIO.BCM)
 
-        return args, 201
+    # set TRIGGER_PIN to OUTPUT mode
+    GPIO.setup(TRIGGER_PIN, GPIO.OUT)
 
-class GPIOCleanup(Resource):
-    def get(self):
-        GPIO.cleanup()
-
-        return {"message":"pins have been cleared"},200
-
-class GPIOSetup(Resource):
-    def get(self):
-        # GPIO setup
-        GPIO.setmode(GPIO.BCM)
-
-        #removing the warings
-        GPIO.setwarnings(False)
-
-        #setting the mode for all pins so all will be switched on
-        GPIO.setup(GPIO_PRESET_1, GPIO.OUT)
-        GPIO.setup(GPIO_PRESET_4, GPIO.OUT)
-        GPIO.setup(GPIO_PRESET_1, GPIO.LOW)
-        GPIO.setup(GPIO_PRESET_4, GPIO.LOW)
-
-        return {"message":"pins have been setup"},200
-
-# Everything is under the root for now
-api.add_resource(DeskController, '/')
-api.add_resource(GPIOCleanup, '/cleanup')
-api.add_resource(GPIOSetup, '/setup')
+    # set ECHO_PIN to INPUT mode
+    GPIO.setup(ECHO_PIN, GPIO.IN)
 
 
-# Run in debug mode
+def loop():
+    while True:
+        distance = get_sonar()  # get distance
+        print("The distance is : %.2f cm" % (distance))
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    print("Program is starting...")
+    setup()
+    try:
+        loop()
+    except KeyboardInterrupt:
+        GPIO.cleanup()
