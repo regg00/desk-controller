@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 from fastapi import FastAPI
 from loguru import logger
-import random, os, time
+import os, time
+import RPi.GPIO as GPIO
 
 
 UP_PIN = int(os.environ.get("UP_PIN", 18))
@@ -19,8 +20,46 @@ class Desk(BaseModel):
     height: int
 
 
+# Obtain pulse time of a pin under TIMEOUT
+def pulse_in(pin: int, level, TIMEOUT: int):
+    t0 = time.time()
+    while GPIO.input(pin) != level:
+        if (time.time() - t0) > TIMEOUT * 0.000001:
+            return 0
+    t0 = time.time()
+    while GPIO.input(pin) == level:
+        if (time.time() - t0) > TIMEOUT * 0.000001:
+            return 0
+    pulse_time = (time.time() - t0) * 1000000
+    return pulse_time
+
+
+# Get the measurement results of ultrasonic module,with unit: cm
 def get_sensor_height():
-    return random.randint(0, 10)
+    # make TRIGGER_PIN output 10us HIGH level
+    GPIO.output(TRIGGER_PIN, GPIO.HIGH)
+
+    # 10us
+    time.sleep(0.00001)
+
+    # make TRIGGER_PIN output LOW level
+    GPIO.output(TRIGGER_PIN, GPIO.LOW)
+
+    # read plus time of ECHO_PIN
+    ping_time = pulse_in(ECHO_PIN, GPIO.HIGH, TIMEOUT)
+
+    # calculate distance with sound speed 340m/s
+    distance = ping_time * 340.0 / 2.0 / 10000.0
+    return int(distance)
+
+
+GPIO.setmode(GPIO.BCM)
+
+# set TRIGGER_PIN to OUTPUT mode
+GPIO.setup(TRIGGER_PIN, GPIO.OUT)
+
+# set ECHO_PIN to INPUT mode
+GPIO.setup(ECHO_PIN, GPIO.IN)
 
 
 def move_desk(direction: str, desired_height: int):
@@ -34,7 +73,7 @@ def move_desk(direction: str, desired_height: int):
     logger.debug(f"Pressing {relay_to_use} button")
     # TODO: Press relay_to_use button
 
-    while get_sensor_height() in range(desired_height - 2, desired_height + 2):
+    while get_sensor_height() in range(desired_height - 1, desired_height + 1):
         logger.debug(f"Desk is at {get_sensor_height()}cm. Moving it {direction}")
 
     logger.debug(

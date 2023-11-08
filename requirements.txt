@@ -1,4 +1,4 @@
-RPi.GPIO==0.7.1
+RPi.GPIO
 fastapi
 uvicorn
 loguru
