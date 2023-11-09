@@ -3,17 +3,29 @@ from fastapi import FastAPI
 from loguru import logger
 import os, time
 import RPi.GPIO as GPIO
+import numpy as np
+import warnings
 
 
+# Setup section
 UP_PIN = int(os.environ.get("UP_PIN", 18))
 DOWN_PIN = int(os.environ.get("DOWN_PIN", 25))
 TRIGGER_PIN = int(os.environ.get("TRIGGER_PIN", 23))
 ECHO_PIN = int(os.environ.get("ECHO_PIN", 24))
 MAX_DISTANCE = int(os.environ.get("MAX_DISTANCE", 220))
-SIT_HEIGHT = int(os.environ.get("SIT_HEIGHT", 70))
-STAND_HEIGHT = int(os.environ.get("STAND_HEIGHT", 120))
-
+SIT_HEIGHT = int(os.environ.get("SIT_HEIGHT", 71))
+STAND_HEIGHT = int(os.environ.get("STAND_HEIGHT", 116))
+CALIBRATION = int(os.environ.get("CALIBRATION", 1))
 TIMEOUT = MAX_DISTANCE * 60
+
+warnings.filterwarnings("ignore")
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(TRIGGER_PIN, GPIO.OUT)
+GPIO.setup(ECHO_PIN, GPIO.IN)
+GPIO.setup(UP_PIN, GPIO.OUT, initial=1)
+GPIO.setup(DOWN_PIN, GPIO.OUT, initial=1)
+GPIO.setwarnings(False)
 
 
 app = FastAPI()
@@ -23,52 +35,45 @@ class Desk(BaseModel):
     height: int
 
 
-# Obtain pulse time of a pin under TIMEOUT
-def pulse_in(pin: int, level, TIMEOUT: int):
-    t0 = time.time()
-    while GPIO.input(pin) != level:
-        if (time.time() - t0) > TIMEOUT * 0.000001:
-            return 0
-    t0 = time.time()
-    while GPIO.input(pin) == level:
-        if (time.time() - t0) > TIMEOUT * 0.000001:
-            return 0
-    pulse_time = (time.time() - t0) * 1000000
-    return pulse_time
+def reject_outliers(data, m=2):
+    return data[abs(data - np.mean(data)) < m * np.std(data)]
 
 
-# Get the measurement results of ultrasonic module,with unit: cm
 def get_sensor_height():
-    # make TRIGGER_PIN output 10us HIGH level
-    GPIO.output(TRIGGER_PIN, GPIO.HIGH)
+    # Average 10 measurements
+    measurements = []
+    for _ in range(10):
+        GPIO.output(TRIGGER_PIN, GPIO.HIGH)
+        time.sleep(0.00001)
+        GPIO.output(TRIGGER_PIN, GPIO.LOW)
 
-    # 10us
-    time.sleep(0.00001)
+        while GPIO.input(ECHO_PIN) == 0:
+            pulse_start_time = time.time()
+        while GPIO.input(ECHO_PIN) == 1:
+            pulse_end_time = time.time()
 
-    # make TRIGGER_PIN output LOW level
-    GPIO.output(TRIGGER_PIN, GPIO.LOW)
+        pulse_duration = pulse_end_time - pulse_start_time
+        distance = int(round(pulse_duration * 17150, 2))
+        measurements.append(distance)
+        time.sleep(0.06)
 
-    # read plus time of ECHO_PIN
-    ping_time = pulse_in(ECHO_PIN, GPIO.HIGH, TIMEOUT)
+    measurements = np.asarray(measurements)
+    logger.debug(f"Raw measurements: {measurements}")
 
-    # calculate distance with sound speed 340m/s
-    distance = ping_time * 340.0 / 2.0 / 10000.0
-    return int(distance)
+    # Remove outliers if any
+    cleaned_up_measurements = reject_outliers(measurements)
 
+    try:
+        mean_value = int(np.nanmean(cleaned_up_measurements))
+    except ValueError:
+        mean_value = int(np.nanmean(measurements))
 
-GPIO.setmode(GPIO.BCM)
-
-# set TRIGGER_PIN to OUTPUT mode
-GPIO.setup(TRIGGER_PIN, GPIO.OUT)
-
-# set ECHO_PIN to INPUT mode
-GPIO.setup(ECHO_PIN, GPIO.IN)
-
-GPIO.setup(UP_PIN, GPIO.OUT, initial=1)
-GPIO.setup(DOWN_PIN, GPIO.OUT, initial=1)
+    logger.info(f"Height: {mean_value}")
+    return mean_value
 
 
 def move_desk(desired_height: int):
+    # Determine which button to press
     current_height = get_sensor_height()
 
     if current_height > desired_height:
@@ -79,9 +84,14 @@ def move_desk(desired_height: int):
         logger.debug("Desk is at the correct height")
 
     logger.debug(f"Pressing {relay_to_use} button")
+
     GPIO.output(relay_to_use, GPIO.LOW)
 
-    while get_sensor_height() != desired_height:
+    while (
+        not desired_height - CALIBRATION
+        <= get_sensor_height()
+        <= desired_height + CALIBRATION
+    ):
         logger.debug(
             f"Desk is at {get_sensor_height()}cm. Moving it to {desired_height}cm"
         )
@@ -95,6 +105,18 @@ def move_desk(desired_height: int):
 @app.get("/desk/")
 def get_desk_height():
     return {"height": get_sensor_height()}
+
+
+@app.get("/cleanup/")
+def cleanup():
+    GPIO.cleanup()
+    GPIO.setwarnings(False)
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(TRIGGER_PIN, GPIO.OUT)
+    GPIO.setup(ECHO_PIN, GPIO.IN)
+    GPIO.setup(UP_PIN, GPIO.OUT, initial=1)
+    GPIO.setup(DOWN_PIN, GPIO.OUT, initial=1)
+    return {"message": "pins have been cleared"}
 
 
 @app.post("/desk/preset/{preset_id}")
