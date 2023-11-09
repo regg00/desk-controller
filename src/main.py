@@ -150,6 +150,21 @@ def get_desk_height():
     return {"height": get_sensor_height()}
 
 
+@app.get("/desk/state/")
+def get_desk_state_for_hass():
+    """Return the state of the desk for Home Assistant
+
+    Returns:
+        dict: The state of the desk for Home Assistant
+    """
+    current_height = get_sensor_height()
+    if current_height >= 115:
+        result = {"is_active": True}
+    elif current_height <= 72:
+        result = {"is_active": False}
+    return result
+
+
 @app.get("/cleanup/")
 def cleanup():
     """Cleanup the GPIO pins
