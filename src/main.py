@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import FastAPI
 from loguru import logger
 import os, time
@@ -27,20 +27,53 @@ GPIO.setup(UP_PIN, GPIO.OUT, initial=1)
 GPIO.setup(DOWN_PIN, GPIO.OUT, initial=1)
 GPIO.setwarnings(False)
 
-
-app = FastAPI()
+description = """
+This API is used to control a desk with a linear actuator.
+It uses a HC-SR04 ultrasonic sensor to determine the height of the desk.
+The sensor is connected to the Raspberry Pi.
+The Raspberry Pi is connected to a relay board which controls the linear actuator.
+The relay board is connected to the linear actuator buttons.
+"""
+app = FastAPI(
+    title="Desk Controller API",
+    description=description,
+    summary="API to control a desk with a linear actuator",
+    version="1.0.0",
+    contact={"name": "Régis Tremblay Lefrançois", "url": "https://github.com/regg00"},
+)
 
 
 class Desk(BaseModel):
-    height: int
+    """The definition of the Desk object
+
+    Args:
+        BaseModel (Pydantic.BaseModel): The base model for the Desk object defining the minimum and maximum height of the desk
+    """
+
+    height: int = Field(None, ge=71, le=116)
 
 
 def reject_outliers(data, m=2):
+    """Remove outliers from a numpy array
+
+    Args:
+        data (numpy.array): The array to remove outliers from
+        m (int, optional): The relative scale. Defaults to 2.
+
+    Returns:
+        numpy.array: The array without outliers
+    """
     return data[abs(data - np.mean(data)) < m * np.std(data)]
 
 
 def get_sensor_height():
-    # Average 10 measurements
+    """Get the height of the desk using the ultrasonic sensor
+
+    Returns:
+        int: The height of the desk in cm
+    """
+
+    # Take 10 measurements and return the mean value without outliers.
     measurements = []
     for _ in range(10):
         GPIO.output(TRIGGER_PIN, GPIO.HIGH)
@@ -73,6 +106,11 @@ def get_sensor_height():
 
 
 def move_desk(desired_height: int):
+    """Move the desk to the desired height
+
+    Args:
+        desired_height (int): The desired height of the desk in cm
+    """
     # Determine which button to press
     current_height = get_sensor_height()
 
@@ -104,11 +142,21 @@ def move_desk(desired_height: int):
 
 @app.get("/desk/")
 def get_desk_height():
+    """Return the height of the desk in cm
+
+    Returns:
+        dict: The height of the desk in cm
+    """
     return {"height": get_sensor_height()}
 
 
 @app.get("/cleanup/")
 def cleanup():
+    """Cleanup the GPIO pins
+
+    Returns:
+        dict: A message confirming that the pins have been cleaned up
+    """
     GPIO.cleanup()
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
@@ -121,6 +169,14 @@ def cleanup():
 
 @app.post("/desk/preset/{preset_id}")
 def set_preset_height(preset_id: int):
+    """Set the desk to a preset height
+
+    Args:
+        preset_id (int): The id of the preset to use
+
+    Returns:
+        dict: A confirmation message and the current height of the desk
+    """
     if preset_id == 1:
         move_desk(SIT_HEIGHT)
     elif preset_id == 2:
@@ -133,6 +189,14 @@ def set_preset_height(preset_id: int):
 
 @app.post("/desk/")
 def set_desk_height(desk: Desk):
+    """Set the desk to the desired height
+
+    Args:
+        desk (Desk): The desk object containing the desired height
+
+    Returns:
+        dict: A confirmation message and the current height of the desk
+    """
     current_height = get_sensor_height()
     if current_height > desk.height:
         logger.debug("Desk is too high, lowering it")
