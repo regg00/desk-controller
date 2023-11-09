@@ -64,10 +64,8 @@ GPIO.setup(TRIGGER_PIN, GPIO.OUT)
 # set ECHO_PIN to INPUT mode
 GPIO.setup(ECHO_PIN, GPIO.IN)
 
-GPIO.setup(UP_PIN, GPIO.OUT)
-GPIO.setup(UP_PIN, GPIO.LOW)
-GPIO.setup(DOWN_PIN, GPIO.OUT)
-GPIO.setup(DOWN_PIN, GPIO.LOW)
+GPIO.setup(UP_PIN, GPIO.OUT, initial=1)
+GPIO.setup(DOWN_PIN, GPIO.OUT, initial=1)
 
 
 def move_desk(desired_height: int):
@@ -81,7 +79,7 @@ def move_desk(desired_height: int):
         logger.debug("Desk is at the correct height")
 
     logger.debug(f"Pressing {relay_to_use} button")
-    GPIO.output(relay_to_use, GPIO.HIGH)
+    GPIO.output(relay_to_use, GPIO.LOW)
 
     while get_sensor_height() != desired_height:
         logger.debug(
@@ -91,7 +89,7 @@ def move_desk(desired_height: int):
     logger.debug(
         f"Desk at final position {desired_height}cm. Releasing {relay_to_use} button"
     )
-    GPIO.output(relay_to_use, GPIO.LOW)
+    GPIO.output(relay_to_use, GPIO.HIGH)
 
 
 @app.get("/desk/")
