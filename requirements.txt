@@ -1,3 +1,5 @@
-Flask==2.0.3
-Flask-RESTful==0.3.10
-RPi.GPIO==0.7.1
+RPi.GPIO
+fastapi
+uvicorn
+loguru
+numpy
