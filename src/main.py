@@ -86,20 +86,19 @@ def get_sensor_height():
             pulse_end_time = time.time()
 
         pulse_duration = pulse_end_time - pulse_start_time
-        distance = int(round(pulse_duration * 17150, 2))
+        distance = round(pulse_duration * 17150, 2)
         measurements.append(distance)
-        time.sleep(0.06)
+        time.sleep(0.03)
 
     measurements = np.asarray(measurements)
-    logger.debug(f"Raw measurements: {measurements}")
 
     # Remove outliers if any
     cleaned_up_measurements = reject_outliers(measurements)
 
     try:
-        mean_value = int(np.nanmean(cleaned_up_measurements))
+        mean_value = np.nanmean(cleaned_up_measurements)
     except ValueError:
-        mean_value = int(np.nanmean(measurements))
+        mean_value = np.nanmean(measurements)
 
     logger.info(f"Height: {mean_value}")
     return mean_value
@@ -121,20 +120,14 @@ def move_desk(desired_height: int):
     else:
         logger.debug("Desk is at the correct height")
 
-    logger.debug(f"Pressing {relay_to_use} button")
+    # logger.debug(f"Pressing {relay_to_use} button")
 
     GPIO.output(relay_to_use, GPIO.LOW)
 
-    while (
-        not desired_height - CALIBRATION
-        <= get_sensor_height()
-        <= desired_height + CALIBRATION
-    ):
-        logger.debug(
-            f"Desk is at {get_sensor_height()}cm. Moving it to {desired_height}cm"
-        )
+    while not abs(round(get_sensor_height()) - desired_height) <= CALIBRATION:
+        logger.debug(f"Moving desk to {desired_height}cm")
 
-    logger.debug(
+    logger.info(
         f"Desk at final position {desired_height}cm. Releasing {relay_to_use} button"
     )
     GPIO.output(relay_to_use, GPIO.HIGH)
@@ -159,9 +152,9 @@ def get_desk_state_for_hass():
     """
     current_height = get_sensor_height()
     if current_height >= 115:
-        result = {"is_active": True}
-    elif current_height <= 72:
-        result = {"is_active": False}
+        result = {"is_active": True, "height": round(current_height)}
+    else:
+        result = {"is_active": False, "height": round(current_height)}
     return result
 
 
