@@ -12,11 +12,10 @@ UP_PIN = int(os.environ.get("UP_PIN", 18))
 DOWN_PIN = int(os.environ.get("DOWN_PIN", 25))
 TRIGGER_PIN = int(os.environ.get("TRIGGER_PIN", 23))
 ECHO_PIN = int(os.environ.get("ECHO_PIN", 24))
-MAX_DISTANCE = int(os.environ.get("MAX_DISTANCE", 220))
 SIT_HEIGHT = int(os.environ.get("SIT_HEIGHT", 71))
 STAND_HEIGHT = int(os.environ.get("STAND_HEIGHT", 116))
 CALIBRATION = int(os.environ.get("CALIBRATION", 1))
-TIMEOUT = MAX_DISTANCE * 60
+TIMEOUT = int(os.environ.get("TIMEOUT", 20))
 
 warnings.filterwarnings("ignore")
 
@@ -120,11 +119,13 @@ def move_desk(desired_height: int):
     else:
         logger.debug("Desk is at the correct height")
 
-    # logger.debug(f"Pressing {relay_to_use} button")
-
+    max_run_time = time.time() + TIMEOUT  # Set the maximum run time to 20 seconds
     GPIO.output(relay_to_use, GPIO.LOW)
 
     while not abs(round(get_sensor_height()) - desired_height) <= CALIBRATION:
+        if time.time() > max_run_time:
+            logger.warning("Move timeout reached")
+            break
         logger.debug(f"Moving desk to {desired_height}cm")
 
     logger.info(
