@@ -6,24 +6,49 @@ import RPi.GPIO as GPIO
 import numpy as np
 import warnings
 
-
-# Setup section
+# The pin number for the UP button
 UP_PIN = int(os.environ.get("UP_PIN", 18))
+
+# The pin number for the DOWN button
 DOWN_PIN = int(os.environ.get("DOWN_PIN", 25))
+
+# The pin number for the ultrasonic sensor trigger
 TRIGGER_PIN = int(os.environ.get("TRIGGER_PIN", 23))
+
+# The pin number for the ultrasonic sensor echo
 ECHO_PIN = int(os.environ.get("ECHO_PIN", 24))
+
+# The height of the desk when sitting (in cm)
 SIT_HEIGHT = int(os.environ.get("SIT_HEIGHT", 71))
+
+# The height of the desk when standing (in cm)
 STAND_HEIGHT = int(os.environ.get("STAND_HEIGHT", 116))
+
+# The calibration value for the height desk (in cm)
 CALIBRATION = int(os.environ.get("CALIBRATION", 1))
+
+# The maximum time to move the desk (in seconds)
 TIMEOUT = int(os.environ.get("TIMEOUT", 20))
 
+# Ignore warnings from the ultrasonic sensor
 warnings.filterwarnings("ignore")
 
+# Set the GPIO mode to BCM
 GPIO.setmode(GPIO.BCM)
+
+# Set the trigger pin as an output
 GPIO.setup(TRIGGER_PIN, GPIO.OUT)
+
+# Set the echo pin as an input
 GPIO.setup(ECHO_PIN, GPIO.IN)
+
+# Set the UP button pin as an output and set it to HIGH
 GPIO.setup(UP_PIN, GPIO.OUT, initial=1)
+
+# Set the DOWN button pin as an output and set it to HIGH
 GPIO.setup(DOWN_PIN, GPIO.OUT, initial=1)
+
+# Disable warnings from the GPIO pins
 GPIO.setwarnings(False)
 
 description = """
